@@ -62,6 +62,7 @@ export interface RepositorySummary {
   intended_contributors?: string;
   major_subsystems?: string[];
   unique_concepts?: string[];
+  llm_provider?: string;
 }
 
 export interface ArchitectureReport {

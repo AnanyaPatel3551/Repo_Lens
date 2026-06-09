@@ -141,6 +141,18 @@ class SummaryGenerator:
         except Exception as e:
             print(f"SummaryGenerator LLM call failed or skipped: {e}. Using heuristics fallback.")
 
+        # Resolve LLM provider name to save in summary metadata
+        from src.utils.config import settings
+        llm_provider_name = settings.LLM_PROVIDER
+        if llm_provider_name == "ollama":
+            llm_provider_name = f"ollama ({settings.OLLAMA_MODEL})"
+        elif llm_provider_name == "gemini":
+            llm_provider_name = "gemini-2.5-flash-lite"
+        elif llm_provider_name == "openai":
+            llm_provider_name = "gpt-4o-mini"
+        else:
+            llm_provider_name = settings.LLM_PROVIDER
+
         # Combine into Repository Summary
         summary = {
             "project_purpose": purpose,
@@ -148,7 +160,8 @@ class SummaryGenerator:
             "main_frameworks": [f"{fw} ({int(score * 100)}%)" for fw, score in frameworks.items()],
             "repo_size": size_descr,
             "important_modules": important_dirs,
-            "architecture_overview": arch_overview
+            "architecture_overview": arch_overview,
+            "llm_provider": llm_provider_name
         }
 
         # Override/Extend with LLM results if available

@@ -59,6 +59,8 @@ backend/temp_workspaces/
 
 # Local databases
 *.db
+*.db-shm
+*.db-wal
 
 # Environment files
 .env

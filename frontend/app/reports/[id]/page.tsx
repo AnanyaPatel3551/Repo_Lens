@@ -929,7 +929,7 @@ export default function ReportPage({ params }: { params: Promise<{ id: string }>
                   </div>
                   <div className="p-3 bg-zinc-900 border border-zinc-850 rounded-xl flex items-center justify-between text-[11px] text-zinc-400">
                     <span>LLM Engine Provider:</span>
-                    <strong className="text-indigo-400 font-mono">gemini-2.5-flash-lite</strong>
+                    <strong className="text-indigo-400 font-mono">{report.summary?.llm_provider || 'gemini-2.5-flash-lite'}</strong>
                   </div>
                 </div>
 
