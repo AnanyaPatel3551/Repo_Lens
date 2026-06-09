@@ -19,6 +19,19 @@ from src.services.explanation_service import ExplanationService
 from src.services.architecture_diagram_service import ArchitectureDiagramService
 from src.services.llm_provider import get_provider
 
+
+def handle_llm_exception(e: Exception, action: str):
+    err_msg = str(e)
+    if "429" in err_msg or "quota" in err_msg.lower() or "limit" in err_msg.lower():
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Gemini API rate limit or daily quota exceeded while generating {action}. Please configure your own GEMINI_API_KEY or switch LLM_PROVIDER to ollama/openai in backend/.env."
+        )
+    raise HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail=f"Failed to generate {action}: {err_msg}"
+    )
+
 router = APIRouter(prefix="/api")
 
 @router.post(
@@ -111,10 +124,7 @@ async def ask_repository(
         ans = await AskService.ask(db, report, request.question)
         return ans
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to generate answer: {str(e)}"
-        )
+        handle_llm_exception(e, "answer")
 
 @router.get(
     "/repositories/{id}/tour",
@@ -150,10 +160,7 @@ async def get_repository_tour(
         await db.commit()
         return tour_data
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to generate repository tour: {str(e)}"
-        )
+        handle_llm_exception(e, "repository tour")
 
 @router.get(
     "/repositories/{id}/architecture-walkthrough",
@@ -189,10 +196,7 @@ async def get_architecture_walkthrough(
         await db.commit()
         return walkthrough_data
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to generate architecture walkthrough: {str(e)}"
-        )
+        handle_llm_exception(e, "architecture walkthrough")
 
 @router.get(
     "/repositories/{id}/file",
@@ -293,10 +297,7 @@ async def explain_codebase_file(
         provider = get_provider()
         return await ExplanationService.explain_file(db, id, path, provider)
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to generate file explanation: {str(e)}"
-        )
+        handle_llm_exception(e, "file explanation")
 
 
 @router.get(
@@ -326,10 +327,7 @@ async def explain_codebase_folder(
         provider = get_provider()
         return await ExplanationService.explain_folder(db, id, path, provider)
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to generate folder explanation: {str(e)}"
-        )
+        handle_llm_exception(e, "folder explanation")
 
 
 @router.get(
@@ -358,8 +356,5 @@ async def get_repository_diagrams(
         diagrams = await ArchitectureDiagramService.get_diagrams(db, report, provider)
         return diagrams
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to generate architecture diagrams: {str(e)}"
-        )
+        handle_llm_exception(e, "architecture diagrams")
 
