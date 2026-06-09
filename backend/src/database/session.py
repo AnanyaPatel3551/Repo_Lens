@@ -4,9 +4,14 @@ from sqlalchemy.orm import DeclarativeBase
 
 from src.utils.config import settings
 
+# Resolve async driver prefix for PostgreSQL (e.g. Render/Heroku standard env variables)
+db_url = settings.DATABASE_URL
+if db_url.startswith("postgresql://"):
+    db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+
 # Create database engine with asyncpg driver
 engine = create_async_engine(
-    settings.DATABASE_URL,
+    db_url,
     pool_pre_ping=True,
     echo=False  # Set to True for debugging SQL queries
 )
