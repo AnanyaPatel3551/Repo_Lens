@@ -1,0 +1,66 @@
+# Environments
+backend/venv/
+backend/.env
+venv/
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Node
+frontend/node_modules/
+node_modules/
+npm-debug.log
+yarn-error.log
+yarn-debug.log
+.pnpm-debug.log
+frontend/.next/
+.next/
+out/
+build/
+dist/
+
+# Database
+postgres_data/
+*.sqlite3
+
+# IDEs and OS
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# RepoLens temporary cloned repositories
+backend/temp_workspaces/
+
+# Local databases
+*.db
+
+# Environment files
+.env
+.env.*
+backend/.env

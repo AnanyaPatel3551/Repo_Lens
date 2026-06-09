@@ -1,0 +1,15 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+asyncpg
+aiosqlite
+pydantic
+pydantic-settings
+GitPython
+tomli
+httpx
+pytest
+pytest-asyncio
+google-generativeai
+openai
+pgvector
