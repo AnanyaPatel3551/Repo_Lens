@@ -8,6 +8,12 @@ class Settings(BaseSettings):
     # Database configuration (defaults to local docker postgres instance using asyncpg)
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgrespassword@localhost:5432/repolens"
     
+    # CORS Origins (comma-separated or JSON list in environment)
+    BACKEND_CORS_ORIGINS: list[str] = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ]
+    
     # Directory to store temporary workspace clones inside the project workspace
     TEMP_DIR: str = os.path.join(
         os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 
