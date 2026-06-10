@@ -70,11 +70,10 @@ class GeminiProvider(BaseLLMProvider):
                     raise e
 
     async def generate_embedding(self, text: str) -> List[float]:
-        # gemini-embedding-2 is the recommended embedding model
-        # Using a run_in_executor to avoid blocking the main thread since google-generativeai is synchronous
+        # gemini-embedding-001 is the standard, globally supported embedding model
         def _call_embed():
             result = self.genai.embed_content(
-                model="models/gemini-embedding-2",
+                model="models/gemini-embedding-001",
                 content=text,
                 task_type="retrieval_document"
             )
@@ -93,7 +92,7 @@ class GeminiProvider(BaseLLMProvider):
             batch = texts[i:i + batch_size]
             def _call_embed_batch(b=batch):
                 result = self.genai.embed_content(
-                    model="models/gemini-embedding-2",
+                    model="models/gemini-embedding-001",
                     content=b,
                     task_type="retrieval_document"
                 )
