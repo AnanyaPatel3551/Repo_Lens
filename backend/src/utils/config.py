@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     LLM_PROVIDER: str = "gemini"
     GEMINI_API_KEY: str = ""
     OPENAI_API_KEY: str = ""
+    GROQ_API_KEY: str = ""
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "llama3"
     OLLAMA_EMBED_MODEL: str = "nomic-embed-text"

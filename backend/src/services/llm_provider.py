@@ -252,6 +252,125 @@ class OllamaProvider(BaseLLMProvider):
             return data["message"]["content"]
 
 
+class GroqProvider(BaseLLMProvider):
+    """
+    Concrete implementation using Groq API (OpenAI-compatible).
+    """
+    def __init__(self):
+        import os
+        self.api_key = settings.GROQ_API_KEY or os.environ.get("GROQ_API_KEY")
+        if not self.api_key:
+            raise ValueError("GROQ_API_KEY is not configured in settings or environment.")
+        from openai import OpenAI
+        self.client = OpenAI(
+            api_key=self.api_key,
+            base_url="https://api.groq.com/openai/v1"
+        )
+        # Check if Gemini API key is available for embedding generation fallback
+        self.genai = None
+        gemini_key = settings.GEMINI_API_KEY or os.environ.get("GEMINI_API_KEY")
+        if gemini_key:
+            try:
+                import google.generativeai as genai
+                genai.configure(api_key=gemini_key)
+                self.genai = genai
+            except Exception:
+                pass
+
+    async def _execute_with_retry(self, func, *args, max_retries: int = 3, initial_backoff: float = 2.0, **kwargs):
+        import asyncio
+        import sys
+        loop = asyncio.get_running_loop()
+        
+        backoff = initial_backoff
+        for attempt in range(max_retries):
+            try:
+                # Execute the synchronous function in the executor
+                return await loop.run_in_executor(None, lambda: func(*args, **kwargs))
+            except Exception as e:
+                err_msg = str(e).lower()
+                is_rate_limit = any(
+                    x in err_msg 
+                    for x in ["429", "resource_exhausted", "quota", "limit", "rate limit"]
+                )
+                if is_rate_limit and attempt < max_retries - 1:
+                    sleep_time = backoff * (2 ** attempt)
+                    print(
+                        f"[GroqProvider] Rate limit hit. Retrying in {sleep_time:.1f}s "
+                        f"(attempt {attempt + 1}/{max_retries})... Error: {e}",
+                        file=sys.stderr
+                    )
+                    await asyncio.sleep(sleep_time)
+                else:
+                    raise e
+
+    async def generate_embedding(self, text: str) -> List[float]:
+        # Fall back to gemini-embedding-001 if available
+        if self.genai:
+            import asyncio
+            loop = asyncio.get_running_loop()
+            def _call_embed():
+                result = self.genai.embed_content(
+                    model="models/gemini-embedding-001",
+                    content=text,
+                    task_type="retrieval_document"
+                )
+                return result["embedding"]
+            try:
+                return await loop.run_in_executor(None, _call_embed)
+            except Exception as e:
+                import sys
+                print(f"Warning: Failed to generate embedding on fallback: {e}", file=sys.stderr)
+        
+        # Fallback to zero-vector if Gemini embedding is unavailable or fails
+        return [0.0] * 768
+
+    async def generate_embeddings(self, texts: List[str]) -> List[List[float]]:
+        if not texts:
+            return []
+        if self.genai:
+            import asyncio
+            loop = asyncio.get_running_loop()
+            batch_size = 100
+            all_embeddings = []
+            for i in range(0, len(texts), batch_size):
+                batch = texts[i:i + batch_size]
+                def _call_embed_batch(b=batch):
+                    result = self.genai.embed_content(
+                        model="models/gemini-embedding-001",
+                        content=b,
+                        task_type="retrieval_document"
+                    )
+                    return result["embedding"]
+                try:
+                    embeddings = await loop.run_in_executor(None, _call_embed_batch)
+                    all_embeddings.extend(embeddings)
+                except Exception as e:
+                    import sys
+                    print(f"Warning: Failed to generate batch embeddings on fallback: {e}", file=sys.stderr)
+                    all_embeddings.extend([[0.0] * 768] * len(batch))
+            return all_embeddings
+            
+        return [[0.0] * 768] * len(texts)
+
+    async def generate_response(self, prompt: str, system_instruction: Optional[str] = None) -> str:
+        def _call_generate():
+            messages = []
+            if system_instruction:
+                messages.append({"role": "system", "content": system_instruction})
+            messages.append({"role": "user", "content": prompt})
+
+            # Use Llama-3.1-8b-instant as the high-speed free model on Groq
+            response = self.client.chat.completions.create(
+                model="llama-3.1-8b-instant",
+                messages=messages,
+                temperature=0.2
+            )
+            return response.choices[0].message.content or ""
+
+        return await self._execute_with_retry(_call_generate)
+
+
 def get_provider() -> BaseLLMProvider:
     """
     Factory function resolving LLM provider instance from settings.
@@ -263,5 +382,7 @@ def get_provider() -> BaseLLMProvider:
         return OpenAIProvider()
     elif provider_name == "ollama":
         return OllamaProvider()
+    elif provider_name == "groq":
+        return GroqProvider()
     else:
         raise ValueError(f"Unsupported LLM provider: {settings.LLM_PROVIDER}")
