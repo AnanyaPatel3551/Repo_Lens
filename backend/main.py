@@ -59,6 +59,17 @@ async def lifespan(app: FastAPI):
         await run_migrations(engine)
         print("PostgreSQL database tables initialized and migrated successfully.")
     except Exception as e:
+        # If PostgreSQL was explicitly requested, do not fall back to SQLite
+        is_postgres_requested = (
+            settings.DATABASE_URL.startswith("postgres://") or 
+            settings.DATABASE_URL.startswith("postgresql://") or
+            "postgresql+asyncpg" in settings.DATABASE_URL
+        )
+        if is_postgres_requested:
+            print(f"\n[CRITICAL] Failed to connect to explicitly configured PostgreSQL: {e}")
+            print("Aborting startup because fallback to SQLite is disabled for PostgreSQL configurations to prevent silent data loss and OOM hangs.\n")
+            raise e
+            
         print(f"\n[WARNING] Failed to connect to PostgreSQL: {e}")
         print("Falling back to local SQLite database: ./repolens.db\n")
         
