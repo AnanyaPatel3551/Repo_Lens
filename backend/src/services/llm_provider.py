@@ -17,6 +17,13 @@ class BaseLLMProvider(ABC):
         pass
 
     @abstractmethod
+    async def generate_embeddings(self, texts: List[str]) -> List[List[float]]:
+        """
+        Generates vector embeddings for a list of input texts.
+        """
+        pass
+
+    @abstractmethod
     async def generate_response(self, prompt: str, system_instruction: Optional[str] = None) -> str:
         """
         Generates a text completion for the given prompt, applying optional system instructions.
@@ -35,12 +42,36 @@ class GeminiProvider(BaseLLMProvider):
         genai.configure(api_key=settings.GEMINI_API_KEY)
         self.genai = genai
 
+    async def _execute_with_retry(self, func, *args, max_retries: int = 3, initial_backoff: float = 2.0, **kwargs):
+        import asyncio
+        import sys
+        loop = asyncio.get_running_loop()
+        
+        backoff = initial_backoff
+        for attempt in range(max_retries):
+            try:
+                # Execute the synchronous function in the executor
+                return await loop.run_in_executor(None, lambda: func(*args, **kwargs))
+            except Exception as e:
+                err_msg = str(e).lower()
+                is_rate_limit = any(
+                    x in err_msg 
+                    for x in ["429", "resource_exhausted", "quota", "limit", "rate limit"]
+                )
+                if is_rate_limit and attempt < max_retries - 1:
+                    sleep_time = backoff * (2 ** attempt)
+                    print(
+                        f"[GeminiProvider] Rate limit hit. Retrying in {sleep_time:.1f}s "
+                        f"(attempt {attempt + 1}/{max_retries})... Error: {e}",
+                        file=sys.stderr
+                    )
+                    await asyncio.sleep(sleep_time)
+                else:
+                    raise e
+
     async def generate_embedding(self, text: str) -> List[float]:
         # gemini-embedding-2 is the recommended embedding model
         # Using a run_in_executor to avoid blocking the main thread since google-generativeai is synchronous
-        import asyncio
-        loop = asyncio.get_running_loop()
-        
         def _call_embed():
             result = self.genai.embed_content(
                 model="models/gemini-embedding-2",
@@ -49,23 +80,42 @@ class GeminiProvider(BaseLLMProvider):
             )
             return result["embedding"]
             
-        return await loop.run_in_executor(None, _call_embed)
+        return await self._execute_with_retry(_call_embed)
+
+    async def generate_embeddings(self, texts: List[str]) -> List[List[float]]:
+        if not texts:
+            return []
+        
+        batch_size = 100
+        all_embeddings = []
+        
+        for i in range(0, len(texts), batch_size):
+            batch = texts[i:i + batch_size]
+            def _call_embed_batch(b=batch):
+                result = self.genai.embed_content(
+                    model="models/gemini-embedding-2",
+                    content=b,
+                    task_type="retrieval_document"
+                )
+                return result["embedding"]
+                
+            embeddings = await self._execute_with_retry(_call_embed_batch)
+            all_embeddings.extend(embeddings)
+            
+        return all_embeddings
 
     async def generate_response(self, prompt: str, system_instruction: Optional[str] = None) -> str:
-        import asyncio
-        loop = asyncio.get_running_loop()
-
         def _call_generate():
-            # Using gemini-2.5-flash-lite as default high-speed, cost-effective LLM
+            # Using gemini-2.5-flash as default high-speed LLM
             model = self.genai.GenerativeModel(
-                model_name="gemini-2.5-flash-lite",
+                model_name="gemini-2.5-flash",
                 system_instruction=system_instruction
             )
             config = {"temperature": 0.2}
             result = model.generate_content(prompt, generation_config=config)
             return result.text
 
-        return await loop.run_in_executor(None, _call_generate)
+        return await self._execute_with_retry(_call_generate)
 
 
 class OpenAIProvider(BaseLLMProvider):
@@ -90,6 +140,29 @@ class OpenAIProvider(BaseLLMProvider):
             return response.data[0].embedding
 
         return await loop.run_in_executor(None, _call_embed)
+
+    async def generate_embeddings(self, texts: List[str]) -> List[List[float]]:
+        if not texts:
+            return []
+        import asyncio
+        loop = asyncio.get_running_loop()
+        
+        batch_size = 100
+        all_embeddings = []
+        
+        for i in range(0, len(texts), batch_size):
+            batch = texts[i:i + batch_size]
+            def _call_embed_batch(b=batch):
+                response = self.client.embeddings.create(
+                    input=b,
+                    model="text-embedding-3-small"
+                )
+                return [data.embedding for data in response.data]
+                
+            embeddings = await loop.run_in_executor(None, _call_embed_batch)
+            all_embeddings.extend(embeddings)
+            
+        return all_embeddings
 
     async def generate_response(self, prompt: str, system_instruction: Optional[str] = None) -> str:
         import asyncio
@@ -132,6 +205,30 @@ class OllamaProvider(BaseLLMProvider):
             response.raise_for_status()
             data = response.json()
             return data["embedding"]
+
+    async def generate_embeddings(self, texts: List[str]) -> List[List[float]]:
+        if not texts:
+            return []
+        import asyncio
+        # Run concurrently with a Semaphore of 5 to avoid crashing local Ollama instance
+        semaphore = asyncio.Semaphore(5)
+        
+        async def embed_single(text: str):
+            async with semaphore:
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    response = await client.post(
+                        f"{self.base_url}/api/embeddings",
+                        json={
+                            "model": self.embed_model,
+                            "prompt": text
+                        }
+                    )
+                    response.raise_for_status()
+                    data = response.json()
+                    return data["embedding"]
+                    
+        tasks = [embed_single(t) for t in texts]
+        return await asyncio.gather(*tasks)
 
     async def generate_response(self, prompt: str, system_instruction: Optional[str] = None) -> str:
         async with httpx.AsyncClient(timeout=120.0) as client:

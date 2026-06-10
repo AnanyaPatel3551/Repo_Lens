@@ -223,11 +223,38 @@ export default function ReportPage({ params }: { params: Promise<{ id: string }>
     } else if (activeTab === 'founder_demo') {
       if (report?.status === 'completed') {
         if (!graphData) loadGraph();
-        if (!diagrams) loadDiagrams();
-        if (tourSteps.length === 0) loadTour();
+        
+        const loadDemoDataSequentially = async () => {
+          let loadedDiagrams = diagrams;
+          if (!loadedDiagrams) {
+            setLoadingDiagrams(true);
+            try {
+              loadedDiagrams = await getDiagrams(id);
+              setDiagrams(loadedDiagrams);
+            } catch (err) {
+              console.error('Failed to load diagrams:', err);
+            } finally {
+              setLoadingDiagrams(false);
+            }
+          }
+          
+          // Load tour steps sequentially after diagrams are loaded to prevent rate limiting
+          if (tourSteps.length === 0) {
+            setLoadingTour(true);
+            try {
+              const data = await getTour(id);
+              setTourSteps(data.tour_steps);
+            } catch (err) {
+              console.error('Failed to load sequential tour:', err);
+            } finally {
+              setLoadingTour(false);
+            }
+          }
+        };
+        loadDemoDataSequentially();
       }
     }
-  }, [activeTab, report?.status]);
+  }, [activeTab, report?.status, diagrams, tourSteps.length, graphData]);
 
   useEffect(() => {
     let intervalId: NodeJS.Timeout;
@@ -241,24 +268,6 @@ export default function ReportPage({ params }: { params: Promise<{ id: string }>
         // Stop polling if the status is final (completed or failed)
         if (data.status === 'completed' || data.status === 'failed') {
           clearInterval(intervalId);
-          if (data.status === 'completed') {
-            // Fetch graph, diagrams, and tour immediately when completed
-            const fetchExtras = async () => {
-              try {
-                const gData = await getGraph(id);
-                setGraphData(gData);
-              } catch (e) { console.error(e); }
-              try {
-                const dData = await getDiagrams(id);
-                setDiagrams(dData);
-              } catch (e) { console.error(e); }
-              try {
-                const tData = await getTour(id);
-                setTourSteps(tData.tour_steps);
-              } catch (e) { console.error(e); }
-            };
-            fetchExtras();
-          }
         }
       } catch (err: any) {
         setError(err.message || 'Failed to retrieve analysis report.');

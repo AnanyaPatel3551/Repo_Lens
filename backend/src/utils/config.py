@@ -14,10 +14,13 @@ class Settings(BaseSettings):
         "http://127.0.0.1:3000",
     ]
     
-    # Directory to store temporary workspace clones inside the project workspace
-    TEMP_DIR: str = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 
-        "temp_workspaces"
+    # Directory to store temporary workspace clones (falls back to /tmp on Linux/Serverless)
+    TEMP_DIR: str = os.environ.get(
+        "TEMP_DIR",
+        "/tmp/temp_workspaces" if os.name != "nt" else os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 
+            "temp_workspaces"
+        )
     )
 
     # Provider settings

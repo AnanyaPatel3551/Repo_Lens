@@ -147,7 +147,7 @@ class SummaryGenerator:
         if llm_provider_name == "ollama":
             llm_provider_name = f"ollama ({settings.OLLAMA_MODEL})"
         elif llm_provider_name == "gemini":
-            llm_provider_name = "gemini-2.5-flash-lite"
+            llm_provider_name = "gemini-2.5-flash"
         elif llm_provider_name == "openai":
             llm_provider_name = "gpt-4o-mini"
         else:
