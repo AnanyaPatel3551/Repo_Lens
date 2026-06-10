@@ -104,6 +104,38 @@ class ChunkRepository(BaseRepository[KnowledgeChunk]):
             matches.sort(key=lambda x: x[1], reverse=True)
             return matches[:limit]
 
+    async def search_lexical(
+        self, repository_id: str, question: str, limit: int = 10
+    ) -> List[Tuple[KnowledgeChunk, float]]:
+        """
+        Retrieves matching chunks using keyword matching on the chunk_content.
+        Supports both PostgreSQL and SQLite.
+        """
+        import re
+        from sqlalchemy import or_
+        
+        # Split question into words and search for chunks containing any of the keywords
+        words = [w.strip() for w in re.split(r'\W+', question) if len(w.strip()) > 2]
+        if not words:
+            # Fallback to returning the first few chunks
+            result = await self.db.execute(
+                select(KnowledgeChunk)
+                .where(KnowledgeChunk.repository_id == repository_id)
+                .limit(limit)
+            )
+            return [(chunk, 0.5) for chunk in result.scalars().all()]
+
+        # Construct a search query: match chunks where content contains keywords
+        clauses = [KnowledgeChunk.chunk_content.ilike(f"%{word}%") for word in words]
+        
+        stmt = (
+            select(KnowledgeChunk)
+            .where(KnowledgeChunk.repository_id == repository_id, or_(*clauses))
+            .limit(limit)
+        )
+        result = await self.db.execute(stmt)
+        return [(chunk, 0.8) for chunk in result.scalars().all()]
+
     @staticmethod
     def _cosine_similarity(v1: List[float], v2: List[float]) -> float:
         """

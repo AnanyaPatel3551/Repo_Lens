@@ -24,12 +24,19 @@ class RetrievalService:
         if not question.strip():
             return []
 
-        # 1. Generate embedding for the query string
-        query_vector = await provider.generate_embedding(question)
-
-        # 2. Search database for matching chunks using the repository
         chunk_repo = ChunkRepository(db)
-        matches = await chunk_repo.search_similarity(repository_id, query_vector, limit=limit)
+        
+        # 1. Try to generate embedding and perform similarity search
+        try:
+            query_vector = await provider.generate_embedding(question)
+            if query_vector and any(v != 0.0 for v in query_vector):
+                matches = await chunk_repo.search_similarity(repository_id, query_vector, limit=limit)
+            else:
+                raise ValueError("Embedding provider returned a zero vector.")
+        except Exception as e:
+            import sys
+            print(f"Warning: Semantic search failed ({e}). Falling back to lexical keyword search.", file=sys.stderr)
+            matches = await chunk_repo.search_lexical(repository_id, question, limit=limit)
 
         # 3. Format matches
         results = []

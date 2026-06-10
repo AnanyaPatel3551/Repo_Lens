@@ -83,7 +83,29 @@ class AskService:
         )
 
         # 5. Execute LLM call
-        raw_answer = await provider.generate_response(prompt, system_instruction=system_instruction)
+        try:
+            raw_answer = await provider.generate_response(prompt, system_instruction=system_instruction)
+        except Exception as e:
+            import sys
+            print(f"Warning: LLM generation failed ({e}). Synthesizing structured search fallback.", file=sys.stderr)
+            
+            # Format a nice fallback answer using the retrieved chunks
+            if retrieved_chunks:
+                file_mentions = ", ".join(sorted(list({f"[{c['file_path']}]({c['file_path']}#L{c['start_line']}-{c['end_line']})" for c in retrieved_chunks})))
+                raw_answer = (
+                    "I searched the repository for your question. The LLM provider is currently unavailable, "
+                    f"but I found matching code chunks in the following files:\n\n{file_mentions}\n\n"
+                    "Here are the relevant code snippets found:\n\n"
+                )
+                for chunk in retrieved_chunks[:3]:
+                    raw_answer += f"### {chunk['file_path']} (Lines {chunk['start_line']}-{chunk['end_line']})\n"
+                    raw_answer += f"```python\n{chunk['chunk_content']}\n```\n\n"
+                
+                # Append explicit citation tags so they can be parsed out cleanly
+                for chunk in retrieved_chunks[:3]:
+                    raw_answer += f" [File: {chunk['file_path']} ({chunk['start_line']}-{chunk['end_line']})]"
+            else:
+                raw_answer = "Information not found in analyzed repository."
 
         # 6. Check for the missing information fallback
         clean_fallback = "Information not found in analyzed repository."
