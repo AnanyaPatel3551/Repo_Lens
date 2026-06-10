@@ -6,10 +6,36 @@ IGNORED_DIRS = {"node_modules", "dist", "build", ".git", "coverage", ".next"}
 def is_binary_file(filepath: str) -> bool:
     """
     Checks if a file is binary by reading its first chunk and scanning for null bytes.
+    Also employs a fast check based on common binary file extensions.
     """
+    _, ext = os.path.splitext(filepath)
+    ext = ext.lower()
+    
+    # Common binary file extensions
+    binary_extensions = {
+        # Databases / state files
+        ".db", ".db-wal", ".db-shm", ".sqlite", ".sqlite3", ".sqlitedb",
+        # Images & Media
+        ".png", ".jpg", ".jpeg", ".gif", ".ico", ".webp", ".pdf",
+        # Audio / Video
+        ".mp3", ".mp4", ".wav", ".avi", ".mkv", ".mov", ".flac",
+        # Fonts
+        ".woff", ".woff2", ".ttf", ".eot", ".otf",
+        # Archives & Executables
+        ".zip", ".tar", ".gz", ".rar", ".7z", ".exe", ".dll", ".so", ".dylib", ".bin", ".msi",
+        # Compiled binaries
+        ".pyc", ".pyo", ".pyd", ".class", ".o", ".a", ".lib",
+        # Next.js / Build / Cache binaries
+        ".sst", ".meta", ".body", ".cache"
+    }
+    
+    if ext in binary_extensions:
+        return True
+        
     try:
         with open(filepath, 'rb') as f:
-            chunk = f.read(8192)
+            # Check up to 64KB for null bytes, in case header has no nulls but body does
+            chunk = f.read(65536)
             return b'\x00' in chunk
     except Exception:
         # If we cannot read it, treat as binary/inaccessible to skip line-counting

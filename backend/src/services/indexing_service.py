@@ -32,9 +32,15 @@ class IndexingService:
             if not os.path.isfile(full_path):
                 continue
 
+            from src.analyzers.scanner import is_binary_file
+            if is_binary_file(full_path):
+                continue
+
             try:
                 with open(full_path, "r", encoding="utf-8", errors="ignore") as f:
                     content = f.read()
+                if "\x00" in content:
+                    continue  # Skip files containing null characters (binary/corrupted)
             except Exception:
                 continue  # Skip unreadable/binary files
 

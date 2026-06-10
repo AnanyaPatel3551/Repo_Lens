@@ -132,6 +132,12 @@ class AnalysisService:
             error_msg = f"{str(e)}\n{traceback.format_exc()}"
             print(f"Error during analysis of report {report_id}: {error_msg}", file=sys.stderr)
             
+            # Roll back aborted transaction to reset database session state
+            try:
+                await db.rollback()
+            except Exception as rb_err:
+                print(f"Warning: Failed to rollback database session: {rb_err}", file=sys.stderr)
+
             # Mark database job as failed
             try:
                 # Refresh report in case of session mismatch
